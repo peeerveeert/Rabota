@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Журнал блоков</title>
+<style>
+  :root{
+    --blue:#007aff; --orange:#ff9500; --gray:#8e8e93; --green:#34c759; --red:#ff3b30;
+    --indigo:#5e5ce6; --pink:#ff375f; --purple:#af52de; --teal:#00c7be; --yellow:#ffb300;
+    --ink:#1c1c1e; --ink2:rgba(28,28,30,0.56); --ink3:rgba(28,28,30,0.36);
+    --glass:rgba(255,255,255,0.6); --glass-strong:rgba(255,255,255,0.78);
+    --stroke:rgba(255,255,255,0.7); --stroke2:rgba(60,60,67,0.1);
+    --ease:cubic-bezier(0.22,1,0.36,1);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation;}
+  html,body{margin:0; padding:0; height:100%; overscroll-behavior:none;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",sans-serif; color:var(--ink);}
+  body{
+    background:
+      radial-gradient(ellipse 55% 38% at 12% 6%, rgba(180,200,255,0.32), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 92% 12%, rgba(160,190,255,0.34), transparent 60%),
+      radial-gradient(ellipse 60% 45% at 30% 95%, rgba(170,220,220,0.3), transparent 60%),
+      radial-gradient(ellipse 55% 40% at 90% 85%, rgba(190,200,210,0.28), transparent 60%),
+      radial-gradient(ellipse 65% 50% at 55% 45%, rgba(140,140,150,0.16), transparent 65%),
+      #eceae7;
+    background-attachment:fixed;
+  }
+  body::before{
+    content:''; position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(90,95,105,0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(90,95,105,0.07) 1px, transparent 1px);
+    background-size:26px 26px;
+  }
+  @keyframes riseIn{from{opacity:0; transform:translateY(10px) scale(0.98);} to{opacity:1; transform:translateY(0) scale(1);}}
+  @keyframes popIn{from{opacity:0; transform:scale(0.9);} to{opacity:1; transform:scale(1);}}
+  @keyframes dropland{
+    0%{transform:scale(0.25) rotate(45deg); border-radius:50% 50% 50% 6%; opacity:0.85;}
+    55%{transform:scale(1.2) rotate(0deg); border-radius:46%; opacity:0.45;}
+    100%{transform:scale(1.7) rotate(0deg); border-radius:50%; opacity:0;}
+  }
+
+  button{font-family:inherit; transition:transform .25s var(--ease), opacity .25s var(--ease), background .3s var(--ease), color .3s var(--ease);}
+  .pressed{transform:scale(0.94); opacity:0.72;}
+
+  .app{max-width:640px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column;}
+
+  header{position:sticky; top:0; z-index:20; padding:calc(env(safe-area-inset-top) + 16px) 16px 10px;
+    backdrop-filter:blur(26px) saturate(180%); -webkit-backdrop-filter:blur(26px) saturate(180%);
+    background:rgba(241,239,236,0.55); border-bottom:1px solid var(--stroke2);}
+  h1{font-weight:700; font-size:26px; letter-spacing:-0.4px; margin:0 0 2px; color:var(--ink);}
+  .sub{color:var(--ink2); font-size:13px; margin:0 0 14px; font-weight:500;}
+
+  .iorow{display:flex; gap:8px; margin-bottom:12px;}
+  .iobtn{flex:1; background:var(--glass); border:1px solid var(--stroke); color:var(--ink2);
+    font-size:12px; font-weight:600; padding:9px 6px; border-radius:12px;
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); text-align:center;}
+
+  .tabs{display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; margin-bottom:6px;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{flex:none; padding:8px 14px; border-radius:100px; background:rgba(255,255,255,0.35); color:var(--ink2);
+    font-size:13px; font-weight:600; border:1px solid var(--stroke2); white-space:nowrap;
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);}
+  .tab.active{background:#fff; color:var(--ink); border-color:transparent; box-shadow:0 3px 10px rgba(60,60,67,0.14);}
+  .cattabs .tab{font-size:12px; padding:6px 12px; font-weight:600;}
+
+  main{flex:1; padding:8px 16px 130px;}
+  .empty{color:var(--ink2); text-align:center; margin-top:40px; font-size:15px; line-height:1.6; padding:0 20px;}
+  .empty b{color:var(--ink); display:block; font-size:19px; font-weight:700; margin-bottom:8px; letter-spacing:-0.3px;}
+
+  .folder{margin-bottom:14px; animation:riseIn .5s var(--ease) backwards;}
+  .folder-head{display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:16px;
+    background:rgba(255,255,255,0.4); border:1px solid var(--stroke2); backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px); margin-bottom:8px;}
+  .folder-head .fname{font-weight:700; font-size:14.5px; flex:1; display:flex; align-items:center; gap:9px;}
+  .folder-head .fmark{width:8px; height:8px; border-radius:2px; background:var(--indigo); flex:none; transform:rotate(45deg);}
+  .folder-head .fcount{font-size:12px; color:var(--ink2); font-weight:600;}
+  .folder-head .chev{color:var(--ink3); font-size:13px; transition:transform .4s var(--ease);}
+  .folder.open .chev{transform:rotate(90deg);}
+  .folder-items{max-height:0; overflow:hidden; transition:max-height .5s var(--ease); padding-left:6px;}
+  .folder.open .folder-items{max-height:3000px;}
+
+  .card{position:relative; background:var(--glass); border:1px solid var(--stroke); border-radius:22px;
+    margin-bottom:12px; overflow:hidden; backdrop-filter:blur(20px) saturate(160%); -webkit-backdrop-filter:blur(20px) saturate(160%);
+    box-shadow:0 8px 26px rgba(60,60,67,0.1); isolation:isolate; animation:riseIn .5s var(--ease) backwards;}
+  .card::before{content:''; position:absolute; top:0; left:16px; right:16px; height:1px; z-index:1;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent);}
+  .card-head{display:flex; align-items:center; gap:12px; padding:15px 16px;}
+  .dot{width:10px; height:10px; border-radius:50%; flex:none;}
+  .dot.new{background:var(--blue);} .dot.progress{background:var(--orange); box-shadow:0 0 8px rgba(255,149,0,0.5);}
+  .dot.paused{background:var(--gray);} .dot.done{background:var(--green);}
+  .card-title{flex:1; min-width:0;}
+  .card-title .name{font-weight:600; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-0.2px;}
+  .card-title .meta{font-size:12px; color:var(--ink2); margin-top:3px; font-weight:500; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .catbadge{font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:6px; white-space:nowrap;}
+  .markerbadge{font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap; color:#fff;}
+  .rolebadge{font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:6px; background:rgba(28,28,30,0.06); color:var(--ink2);}
+  .chev{color:var(--ink3); font-size:14px; transition:transform .4s var(--ease); flex:none;}
+  .card.open .chev{transform:rotate(90deg);}
+
+  .card-body{max-height:0; overflow:hidden; transition:max-height .5s var(--ease);}
+  .card.open .card-body{max-height:1500px;}
+  .card-body-inner{padding:0 16px 16px; border-top:1px solid var(--stroke2); padding-top:12px;}
+
+  .fieldlabel{font-size:11.5px; font-weight:700; color:var(--ink3); text-transform:uppercase; letter-spacing:0.4px; margin:12px 0 6px;}
+  select{width:100%; background:rgba(255,255,255,0.6); border:1px solid var(--stroke2); color:var(--ink);
+    padding:11px 12px; border-radius:12px; font-size:15px; font-family:inherit; margin-bottom:4px;}
+  .complex-input{width:100%; background:rgba(255,255,255,0.6); border:1px solid var(--stroke2); color:var(--ink);
+    padding:10px 12px; border-radius:12px; font-size:14.5px; font-family:inherit; margin:6px 0 8px;}
+  .chiprow{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;}
+  .rchip{font-size:12px; padding:6px 12px; border-radius:10px; border:1px solid var(--stroke2);
+    background:rgba(255,255,255,0.5); color:var(--ink2); font-weight:600;}
+  .rchip.active{background:var(--indigo); color:#fff; border-color:transparent;}
+  .rchip.warr-yes.active{background:var(--green);}
+  .rchip.warr-no.active{background:var(--red);}
+  .mchip{transition:background .25s var(--ease), color .25s var(--ease), border-color .25s var(--ease);}
+  .mchip-special{border:1.5px solid #ff0e0e; color:#ff0e0e; font-weight:800; background:rgba(255,14,14,0.06);}
+  .mchip-special.active{background:#ff0e0e; color:#fff; box-shadow:0 0 10px rgba(255,14,14,0.55);}
+
+  .statusrow{display:flex; gap:6px; margin:14px 0; flex-wrap:wrap;}
+  .sbtn{font-size:12px; padding:7px 12px; border-radius:10px; border:1px solid var(--stroke2);
+    background:rgba(255,255,255,0.45); color:var(--ink2); font-weight:600;}
+  .sbtn.sel-new{background:var(--blue); color:#fff; border-color:transparent;}
+  .sbtn.sel-progress{background:var(--orange); color:#fff; border-color:transparent;}
+  .sbtn.sel-paused{background:var(--gray); color:#fff; border-color:transparent;}
+  .sbtn.sel-done{background:var(--green); color:#fff; border-color:transparent;}
+
+  .cloud{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; padding:6px 2px;}
+  .bubble{background:rgba(255,255,255,0.55); border:1px solid var(--stroke); border-radius:20px;
+    padding:9px 15px; font-size:13px; font-weight:500; color:var(--ink); max-width:220px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    box-shadow:0 4px 14px rgba(60,60,67,0.1); will-change:transform;
+    animation-name:float, popIn; animation-timing-function:ease-in-out, var(--ease); animation-iteration-count:infinite,1; animation-duration:5s,.4s;}
+  @keyframes float{0%{transform:translateY(0) rotate(-0.6deg);} 50%{transform:translateY(-7px) rotate(0.6deg);} 100%{transform:translateY(0) rotate(-0.6deg);}}
+  .nolog{color:var(--ink3); font-size:13px; padding:2px 0 10px 2px;}
+
+  .addnote-btn{width:100%; background:rgba(255,255,255,0.4); border:1px dashed rgba(60,60,67,0.25); color:var(--ink);
+    padding:12px; border-radius:14px; font-size:14px; font-weight:600; margin-bottom:8px;}
+
+  .card-actions{display:flex; justify-content:flex-end;}
+  .del{color:var(--red); font-size:12.5px; background:none; border:none; padding:6px; font-weight:600;}
+
+  .freecard .dot{background:var(--indigo);}
+
+  .modal-bg{position:fixed; inset:0; background:rgba(28,28,30,0.28); backdrop-filter:blur(2px);
+    display:flex; opacity:0; pointer-events:none; align-items:flex-end; z-index:50; transition:opacity .35s var(--ease), backdrop-filter .35s var(--ease);}
+  .modal-bg.show{opacity:1; pointer-events:auto; backdrop-filter:blur(6px);}
+  .modal{position:relative; background:rgba(250,249,247,0.82); backdrop-filter:blur(34px) saturate(200%); -webkit-backdrop-filter:blur(34px) saturate(200%);
+    width:100%; max-height:88vh; overflow-y:auto; border-radius:28px 28px 0 0; padding:22px 18px calc(env(safe-area-inset-bottom) + 22px);
+    border-top:1px solid rgba(255,255,255,0.9); transform:translateY(100%); transition:transform .45s var(--ease);
+    box-shadow:0 -10px 40px rgba(60,60,67,0.18); isolation:isolate;}
+  .modal::before{content:''; position:absolute; top:0; left:24px; right:24px; height:1px; z-index:1;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,1), transparent);}
+  .modal-bg.show .modal{transform:translateY(0);}
+  .modal h3{font-size:18px; font-weight:700; margin:0 0 14px; letter-spacing:-0.3px; color:var(--ink);}
+  .modal input, .modal textarea{width:100%; background:rgba(255,255,255,0.65); border:1px solid var(--stroke2);
+    color:var(--ink); padding:13px 14px; border-radius:14px; font-size:16px; margin-bottom:14px; font-family:inherit;
+    transition:border-color .3s var(--ease), background .3s var(--ease);}
+  .modal textarea{min-height:120px; resize:none; line-height:1.5;}
+  .modal input:focus, .modal textarea:focus{outline:none; border-color:rgba(0,122,255,0.55); background:rgba(0,122,255,0.07);}
+  .note-delete{display:none; text-align:center; color:var(--red); font-size:13px; font-weight:600; background:none;
+    border:none; width:100%; padding:8px 0 14px;}
+  .note-delete.show{display:block;}
+  .modal-btns{display:flex; gap:10px;}
+  .modal-btns button{flex:1; padding:14px; border-radius:14px; font-weight:700; font-size:15px; border:none;}
+  .cancel{background:rgba(28,28,30,0.06); color:var(--ink2);}
+  .create{background:var(--blue); color:#fff;}
+
+  .toast{position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:rgba(28,28,30,0.85); backdrop-filter:blur(20px); color:#fff; padding:11px 20px;
+    border-radius:100px; font-size:13.5px; font-weight:600; opacity:0; transition:all .4s var(--ease); z-index:60;
+    pointer-events:none;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* Dock */
+  .dockwrap{position:fixed; left:0; right:0; bottom:0; z-index:30; display:flex; justify-content:center;
+    padding:0 16px calc(env(safe-area-inset-bottom) + 14px); pointer-events:none;}
+  .dock{position:relative; pointer-events:auto; max-width:608px; width:auto; display:flex; align-items:center; gap:8px;
+    background:rgba(255,255,255,0.55); border:1px solid var(--stroke); border-radius:26px; padding:6px;
+    backdrop-filter:blur(30px) saturate(190%); -webkit-backdrop-filter:blur(30px) saturate(190%);
+    box-shadow:0 14px 34px rgba(60,60,67,0.2), 0 2px 8px rgba(60,60,67,0.08); isolation:isolate;
+    transition:width .1s;}
+  .dock::before{content:''; position:absolute; top:0; left:20px; right:20px; height:1px; z-index:2;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,0.95), transparent); pointer-events:none;}
+  .dock-circle{position:relative; overflow:hidden; flex:none; width:46px; height:46px; border-radius:50%;
+    background:rgba(255,255,255,0.55); border:1px solid var(--stroke2); color:var(--ink);
+    display:flex; align-items:center; justify-content:center; font-size:18px;}
+  .dock-circle.active{background:rgba(0,122,255,0.16); color:var(--blue); border-color:rgba(0,122,255,0.3);}
+  .dock-circle.primary{background:#0077ed; color:#fff; border:none; box-shadow:0 4px 12px rgba(0,119,237,0.3); font-size:22px;}
+  .drop{position:absolute; left:50%; top:50%; width:70%; height:70%; margin:-35% 0 0 -35%;
+    background:rgba(120,120,130,0.35); pointer-events:none; animation:dropland .55s ease-out forwards;}
+  .dock-circle.active .drop, .dock-circle.primary .drop{background:rgba(255,255,255,0.5);}
+
+  .dock-input{flex:0; width:0; opacity:0; background:transparent; border:none; font-size:16px; color:var(--ink);
+    padding:0; margin:0; transition:flex .4s var(--ease), width .4s var(--ease), opacity .25s var(--ease), padding .4s var(--ease);}
+  .dock.searching .dock-input{flex:1; width:auto; opacity:1; padding:0 4px;}
+  .dock-actions{display:flex; gap:8px; overflow:hidden; transition:flex .4s var(--ease), width .4s var(--ease), opacity .3s var(--ease), margin .4s var(--ease);}
+  .dock.searching .dock-actions{flex:0; width:0; opacity:0; margin:0; pointer-events:none;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Журнал блоков</h1>
+    <p class="sub">Актуализация по блокам в работе</p>
+    <div class="iorow">
+      <button class="iobtn" onclick="exportData()">⬇ Экспорт .json</button>
+      <label class="iobtn" style="text-align:center;">
+        ⬆ Импорт .json
+        <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
+      </label>
+    </div>
+    <div class="tabs" id="statusTabs"></div>
+    <div class="tabs cattabs" id="catTabs"></div>
+  </header>
+  <main id="main"></main>
+</div>
+
+<div class="dockwrap">
+  <div class="dock" id="dock">
+    <button class="dock-circle" id="searchToggle" onclick="toggleSearch()">⌕</button>
+    <input id="search" class="dock-input" placeholder="Поиск по номеру блока" oninput="renderList()">
+    <div class="dock-actions" id="dockActions">
+      <button class="dock-circle" onclick="openModal('note','FREE')">✏️</button>
+      <button class="dock-circle primary" onclick="openModal('newBlock')">+</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalBgNew" onclick="if(event.target===this)closeModal('newBlock')">
+  <div class="modal">
+    <h3>Новый блок</h3>
+    <div class="fieldlabel">Категория</div>
+    <select id="newCategory" onchange="onNewCategoryChange()"></select>
+    <div id="so96Fields" style="display:none;">
+      <div class="fieldlabel">Комплекс</div>
+      <input id="newComplex" list="complexSuggestions" class="complex-input" placeholder="Например: Комплекс №5">
+      <div class="fieldlabel">Роль в комплексе (необязательно)</div>
+      <div class="chiprow" id="newRoleChips"></div>
+    </div>
+    <div class="fieldlabel">Номер блока</div>
+    <input id="newTitle" placeholder="Номер / название" autocomplete="off">
+    <div class="fieldlabel">Гарантия (необязательно)</div>
+    <div class="chiprow">
+      <button type="button" class="rchip warr-yes" id="newWarrYes" onclick="selectNewWarranty(true)">Гарантийное</button>
+      <button type="button" class="rchip warr-no" id="newWarrNo" onclick="selectNewWarranty(false)">Не гарантийное</button>
+    </div>
+    <div class="modal-btns">
+      <button class="cancel" onclick="closeModal('newBlock')">Отмена</button>
+      <button class="create" onclick="createBlock()">Создать</button>
+    </div>
+  </div>
+</div>
+<datalist id="complexSuggestions"></datalist>
+
+<div class="modal-bg" id="modalBgNote" onclick="if(event.target===this)closeModal('note')">
+  <div class="modal">
+    <h3 id="noteModalTitle">Новая заметка</h3>
+    <textarea id="noteText" placeholder="Что сделано, что заметил, что осталось…"></textarea>
+    <button class="note-delete" id="noteDeleteBtn" onclick="deleteNote()">Удалить заметку</button>
+    <div class="modal-btns">
+      <button class="cancel" onclick="closeModal('note')">Отмена</button>
+      <button class="create" onclick="submitNote()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STATUSES = {
+  new:{label:'Новый', cls:'new'}, progress:{label:'В работе', cls:'progress'},
+  paused:{label:'Отложено', cls:'paused'}, done:{label:'Завершено', cls:'done'}
+};
+const STATUS_TAB_ORDER = ['all','progress','paused','new','done'];
+const STATUS_TAB_LABELS = {all:'Все', progress:'В работе', paused:'Отложено', new:'Новые', done:'Завершённые'};
+
+const CATEGORIES = [
+  {key:'', label:'Без категории', color:'#c7c7cc'},
+  {key:'so96', label:'СО-96', color:'#5e5ce6'},
+  {key:'so2010', label:'СО-2010', color:'#007aff'},
+  {key:'bnp', label:'БНП', color:'#ff9500'},
+  {key:'bnpi', label:'БНПИ', color:'#ff375f'},
+  {key:'srpbz', label:'СРПБЗ', color:'#34c759'},
+  {key:'bms', label:'БМС-Индикатор', color:'#af52de'},
+  {key:'mfi', label:'МФИ', color:'#00c7be'},
+  {key:'antenna', label:'Антенна', color:'#ffb300'},
+  {key:'free', label:'Свободная категория', color:'#8e8e93'}
+];
+const CAT_MAP = Object.fromEntries(CATEGORIES.map(c=>[c.key,c]));
+const COMPLEX_CONFIG = {
+  so96: { roles:['ПБ','ПУ','УНН','Другое'], placeholder:'Например: Комплекс №5' },
+  bnpi: { roles:['БНПИ','Рама амортизационная','Другое'], placeholder:'Например: РСБН-85' },
+  srpbz: { roles:['СРПБЗ','Рама амортизационная','Пульт управления','Другое'], placeholder:'Название комплекса' }
+};
+const MARKERS = [
+  {key:'defect', label:'Дефектация', color:'#5e5ce6'},
+  {key:'disassembly', label:'Разборка', color:'#ff9500'},
+  {key:'locksmith', label:'Слесарные работы', color:'#af52de'},
+  {key:'assembly', label:'Сборка', color:'#34c759'},
+  {key:'wash', label:'Помывка', color:'#00c7be'},
+  {key:'warehouse', label:'Переместить на склад', color:'#8e8e93'}
+];
+const SPECIAL_MARKER = {key:'prm_prd', label:'ПРМ-ПРД', color:'#ff0e0e', onlyFor:'so96'};
+const STORAGE_KEY = 'blocks-tracker-data-v3';
+const LEGACY_KEY = 'blocks-tracker-data-v2';
+
+let blocks = [];
+let freeNotes = [];
+let openIds = new Set();
+let openFolders = new Set();
+let freeNotesOpen = true;
+let statusFilter = 'all';
+let categoryFilter = 'all';
+let noteCtx = {blockId:null, noteId:null};
+let newRoleSelected = '';
+let newWarranty = null;
+
+// Ripple-«капля» на всех круглых кнопках дока
+document.getElementById('dock').addEventListener('touchstart', e=>{
+  const btn = e.target.closest('.dock-circle');
+  if(!btn) return;
+  const drop = document.createElement('span');
+  drop.className = 'drop';
+  btn.appendChild(drop);
+  drop.addEventListener('animationend', ()=>drop.remove());
+}, {passive:true});
+
+document.addEventListener('touchstart', e=>{
+  const el = e.target.closest('.pressable, button, .bubble, label.iobtn, .folder-head, .card-head');
+  if(el) el.classList.add('pressed');
+}, {passive:true});
+['touchend','touchcancel'].forEach(evt=>{
+  document.addEventListener(evt, ()=>{
+    document.querySelectorAll('.pressed').forEach(el=>el.classList.remove('pressed'));
+  }, {passive:true});
+});
+
+function toggleSearch(){
+  const dock = document.getElementById('dock');
+  const toggle = document.getElementById('searchToggle');
+  const searching = dock.classList.toggle('searching');
+  toggle.classList.toggle('active', searching);
+  toggle.textContent = searching ? '✕' : '⌕';
+  if(searching){
+    setTimeout(()=>document.getElementById('search').focus(), 280);
+  } else {
+    document.getElementById('search').value = '';
+    document.getElementById('search').blur();
+    renderList();
+  }
+}
+
+function fmtTime(ts){
+  const d = new Date(ts);
+  return d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function loadBlocks(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      blocks = parsed.blocks || [];
+      freeNotes = parsed.freeNotes || [];
+    } else {
+      const legacy = localStorage.getItem(LEGACY_KEY);
+      blocks = legacy ? JSON.parse(legacy) : [];
+      freeNotes = [];
+    }
+    blocks.forEach(b=>{
+      (b.notes||[]).forEach(n=>{ if(!n.id) n.id = uid(); });
+      if(b.category===undefined) b.category='';
+      if(b.complex===undefined) b.complex='';
+      if(b.role===undefined) b.role='';
+      if(b.warranty===undefined) b.warranty=null;
+      if(b.markers===undefined) b.markers=[];
+    });
+    freeNotes.forEach(n=>{ if(!n.id) n.id = uid(); });
+  }catch(e){ blocks=[]; freeNotes=[]; showToast('Не удалось прочитать сохранённые данные'); }
+  renderAll();
+}
+function saveBlocks(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({blocks, freeNotes})); }
+  catch(e){ showToast('Ошибка сохранения'); }
+}
+
+function exportData(){
+  const blob = new Blob([JSON.stringify({blocks, freeNotes}, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  a.href = url; a.download = `blocks-backup-${stamp}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Файл сохранён в Загрузки');
+}
+function importData(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const incoming = JSON.parse(reader.result);
+      const incomingBlocks = Array.isArray(incoming) ? incoming : (incoming.blocks || []);
+      const incomingFree = Array.isArray(incoming) ? [] : (incoming.freeNotes || []);
+      incomingBlocks.forEach(b=>{
+        (b.notes||[]).forEach(n=>{ if(!n.id) n.id = uid(); });
+        if(b.category===undefined) b.category='';
+        if(b.complex===undefined) b.complex='';
+        if(b.role===undefined) b.role='';
+        if(b.warranty===undefined) b.warranty=null;
+        if(b.markers===undefined) b.markers=[];
+      });
+      const existingIds = new Set(blocks.map(b=>b.id));
+      blocks = blocks.concat(incomingBlocks.filter(b=>!existingIds.has(b.id)));
+      const existingFreeIds = new Set(freeNotes.map(n=>n.id));
+      freeNotes = freeNotes.concat(incomingFree.filter(n=>!existingFreeIds.has(n.id)));
+      saveBlocks(); renderAll();
+      showToast(`Импортировано: ${incomingBlocks.length}`);
+    }catch(e){ showToast('Файл повреждён или не в том формате'); }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(()=>t.classList.remove('show'), 1600);
+}
+
+function refreshComplexSuggestions(){
+  const set = new Set(blocks.filter(b=>COMPLEX_CONFIG[b.category] && b.complex).map(b=>b.complex));
+  document.getElementById('complexSuggestions').innerHTML =
+    [...set].map(c=>`<option value="${escapeHtml(c)}">`).join('');
+}
+
+function openModal(kind, blockId, noteId){
+  if(kind==='newBlock'){
+    const sel = document.getElementById('newCategory');
+    sel.innerHTML = CATEGORIES.map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+    sel.value = '';
+    document.getElementById('newComplex').value = '';
+    newRoleSelected = '';
+    newWarranty = null;
+    document.getElementById('newRoleChips').innerHTML = '';
+    document.getElementById('so96Fields').style.display = 'none';
+    document.getElementById('newWarrYes').classList.remove('active');
+    document.getElementById('newWarrNo').classList.remove('active');
+    refreshComplexSuggestions();
+    document.getElementById('modalBgNew').classList.add('show');
+    setTimeout(()=>document.getElementById('newTitle').focus(), 300);
+  } else if(kind==='note'){
+    noteCtx = {blockId, noteId: noteId||null};
+    const titleEl = document.getElementById('noteModalTitle');
+    const delBtn = document.getElementById('noteDeleteBtn');
+    const ta = document.getElementById('noteText');
+    if(noteId){
+      let n;
+      if(blockId==='FREE'){ n = freeNotes.find(x=>x.id===noteId); }
+      else { const b = blocks.find(x=>x.id===blockId); n = b && b.notes.find(x=>x.id===noteId); }
+      ta.value = n ? n.text : '';
+      titleEl.textContent = blockId==='FREE' ? 'Заметка' : 'Заметка';
+      delBtn.classList.add('show');
+    } else {
+      ta.value=''; titleEl.textContent = blockId==='FREE' ? 'Новая свободная заметка' : 'Новая заметка';
+      delBtn.classList.remove('show');
+    }
+    document.getElementById('modalBgNote').classList.add('show');
+    setTimeout(()=>ta.focus(), 300);
+  }
+}
+function closeModal(kind){
+  if(kind==='newBlock'){
+    document.getElementById('modalBgNew').classList.remove('show');
+    document.getElementById('newTitle').value = '';
+  } else {
+    document.getElementById('modalBgNote').classList.remove('show');
+    noteCtx = {blockId:null, noteId:null};
+  }
+}
+function onNewCategoryChange(){
+  const cat = document.getElementById('newCategory').value;
+  const cfg = COMPLEX_CONFIG[cat];
+  const wrap = document.getElementById('so96Fields');
+  if(cfg){
+    wrap.style.display = 'block';
+    document.getElementById('newComplex').placeholder = cfg.placeholder;
+    newRoleSelected = '';
+    document.getElementById('newRoleChips').innerHTML = cfg.roles.map(r=>
+      `<button type="button" class="rchip" onclick="selectNewRole('${r}')">${r}</button>`).join('');
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+function selectNewRole(r){
+  newRoleSelected = (newRoleSelected===r) ? '' : r;
+  document.querySelectorAll('#newRoleChips .rchip').forEach(el=>{
+    el.classList.toggle('active', el.textContent===newRoleSelected);
+  });
+}
+function selectNewWarranty(v){
+  newWarranty = (newWarranty===v) ? null : v;
+  document.getElementById('newWarrYes').classList.toggle('active', newWarranty===true);
+  document.getElementById('newWarrNo').classList.toggle('active', newWarranty===false);
+}
+
+function createBlock(){
+  const title = document.getElementById('newTitle').value.trim();
+  if(!title){ showToast('Введите номер блока'); return; }
+  const category = document.getElementById('newCategory').value;
+  const cfg = COMPLEX_CONFIG[category];
+  const complex = cfg ? document.getElementById('newComplex').value.trim() : '';
+  const role = cfg ? newRoleSelected : '';
+  const now = Date.now();
+  const block = {id:'b'+uid(), title, status:'new', category, complex, role, warranty:newWarranty, createdAt:now, updatedAt:now, notes:[]};
+  blocks.unshift(block);
+  saveBlocks();
+  closeModal('newBlock');
+  openIds.add(block.id);
+  renderAll();
+  showToast('Блок добавлен');
+}
+
+function setStatus(id, status){
+  const b = blocks.find(x=>x.id===id);
+  if(!b) return;
+  b.status = status; b.updatedAt = Date.now();
+  saveBlocks(); renderList();
+}
+function setCategory(id, cat){
+  const b = blocks.find(x=>x.id===id);
+  if(!b) return;
+  b.category = cat;
+  if(!COMPLEX_CONFIG[cat]){ b.complex=''; b.role=''; }
+  b.updatedAt = Date.now();
+  saveBlocks(); refreshComplexSuggestions(); renderList();
+}
+function setComplex(id, val){
+  const b = blocks.find(x=>x.id===id);
+  if(!b) return;
+  b.complex = val.trim(); b.updatedAt = Date.now();
+  saveBlocks(); refreshComplexSuggestions(); renderList();
+}
+function setRole(id, role){
+  const b = blocks.find(x=>x.id===id);
+  if(!b) return;
+  b.role = (b.role===role) ? '' : role;
+  b.updatedAt = Date.now();
+  saveBlocks(); renderList();
+}
+function setWarranty(id, val){
+  const b = blocks.find(x=>x.id===id);
+  if(!b) return;
+  b.warranty = (b.warranty===val) ? null : val;
+  b.updatedAt = Date.now();
+  saveBlocks(); renderList();
+}
+function toggleMarker(id, key){
+  const b = blocks.find(x=>x.id===id);
+  if(!b) return;
+  if(!b.markers) b.markers = [];
+  const has = b.markers.includes(key);
+  const isSpecial = key==='prm_prd';
+  if(isSpecial){
+    // особый маркер ПРМ-ПРД независим от обычных — переключается сам по себе
+    b.markers = has ? b.markers.filter(k=>k!=='prm_prd') : [...b.markers.filter(k=>k!=='prm_prd'), 'prm_prd'];
+  } else {
+    // обычные маркеры — только один активен одновременно, новый выбор заменяет старый
+    const keepSpecial = b.markers.filter(k=>k==='prm_prd');
+    b.markers = has ? keepSpecial : [...keepSpecial, key];
+  }
+  b.updatedAt = Date.now();
+  saveBlocks(); renderList();
+}
+
+function submitNote(){
+  const text = document.getElementById('noteText').value.trim();
+  if(!text){ closeModal('note'); return; }
+  if(noteCtx.blockId === 'FREE'){
+    if(noteCtx.noteId){
+      const n = freeNotes.find(x=>x.id===noteCtx.noteId);
+      if(n){ n.text = text; n.editedTs = Date.now(); }
+    } else {
+      freeNotes.unshift({id:uid(), text, ts:Date.now()});
+      freeNotesOpen = true;
+    }
+    saveBlocks(); closeModal('note'); renderList();
+    return;
+  }
+  if(!noteCtx.blockId) { closeModal('note'); return; }
+  const b = blocks.find(x=>x.id===noteCtx.blockId);
+  if(!b) return;
+  if(noteCtx.noteId){
+    const n = b.notes.find(x=>x.id===noteCtx.noteId);
+    if(n){ n.text = text; n.editedTs = Date.now(); }
+  } else {
+    b.notes.push({id:uid(), text, ts: Date.now()});
+    if(b.status === 'new') b.status = 'progress';
+  }
+  b.updatedAt = Date.now();
+  saveBlocks(); closeModal('note'); renderList();
+}
+function deleteNote(){
+  if(noteCtx.blockId === 'FREE'){
+    freeNotes = freeNotes.filter(n=>n.id!==noteCtx.noteId);
+    saveBlocks(); closeModal('note'); renderList();
+    return;
+  }
+  if(!noteCtx.blockId || !noteCtx.noteId) return;
+  const b = blocks.find(x=>x.id===noteCtx.blockId);
+  if(!b) return;
+  b.notes = b.notes.filter(n=>n.id!==noteCtx.noteId);
+  b.updatedAt = Date.now();
+  saveBlocks(); closeModal('note'); renderList();
+}
+
+function deleteBlock(id){
+  blocks = blocks.filter(x=>x.id!==id);
+  saveBlocks(); renderList();
+  showToast('Блок удалён');
+}
+
+function toggleCard(id){
+  if(openIds.has(id)) openIds.delete(id); else openIds.add(id);
+  const el = document.querySelector(`.card[data-id="${id}"]`);
+  if(el) el.classList.toggle('open');
+}
+function toggleFolder(key){
+  if(openFolders.has(key)) openFolders.delete(key); else openFolders.add(key);
+  const el = document.querySelector(`.folder[data-key="${CSS.escape(key)}"]`);
+  if(el) el.classList.toggle('open');
+}
+function toggleFreeNotes(){
+  freeNotesOpen = !freeNotesOpen;
+  const el = document.querySelector('.freecard');
+  if(el) el.classList.toggle('open');
+}
+function setStatusFilter(t){
+  statusFilter = t;
+  document.querySelectorAll('#statusTabs .tab').forEach(el=>el.classList.toggle('active', el.dataset.key===t));
+  renderList();
+}
+function setCategoryFilter(k){
+  categoryFilter = k;
+  document.querySelectorAll('#catTabs .tab').forEach(el=>el.classList.toggle('active', el.dataset.key===k));
+  renderList();
+}
+
+function renderAll(){ renderTabs(); renderList(); }
+
+function renderTabs(){
+  const st = document.getElementById('statusTabs');
+  st.innerHTML = STATUS_TAB_ORDER.map(t=>{
+    const count = t==='all' ? blocks.length : blocks.filter(b=>b.status===t).length;
+    return `<button class="tab ${t===statusFilter?'active':''}" data-key="${t}" onclick="setStatusFilter('${t}')">${STATUS_TAB_LABELS[t]} ${count?('· '+count):''}</button>`;
+  }).join('');
+  const ct = document.getElementById('catTabs');
+  const allBtn = `<button class="tab ${categoryFilter==='all'?'active':''}" data-key="all" onclick="setCategoryFilter('all')">Все изделия</button>`;
+  ct.innerHTML = allBtn + CATEGORIES.map(c=>{
+    const count = blocks.filter(b=>b.category===c.key).length;
+    if(!count) return '';
+    return `<button class="tab ${categoryFilter===c.key?'active':''}" data-key="${c.key}" onclick="setCategoryFilter('${c.key}')">${c.label} · ${count}</button>`;
+  }).join('');
+}
+
+function catBadge(catKey){
+  const c = CAT_MAP[catKey];
+  if(!c || !catKey) return '';
+  return `<span class="catbadge" style="background:${c.color}22; color:${c.color}">${c.label}</span>`;
+}
+function warrBadge(w){
+  if(w===true) return `<span class="catbadge" style="background:#34c75922;color:#248a3d">Гарантия</span>`;
+  if(w===false) return `<span class="catbadge" style="background:#ff3b3022;color:#c81e1e">Без гарантии</span>`;
+  return '';
+}
+function markerBadges(b){
+  if(!b.markers || !b.markers.length) return '';
+  return b.markers.map(k=>{
+    const m = k==='prm_prd' ? SPECIAL_MARKER : MARKERS.find(x=>x.key===k);
+    if(!m) return '';
+    const special = k==='prm_prd' ? 'box-shadow:0 0 9px rgba(255,14,14,0.6); font-weight:800; letter-spacing:0.3px;' : '';
+    return `<span class="markerbadge" style="background:${m.color};${special}">${m.label}</span>`;
+  }).join('');
+}
+
+function buildFreeNotesHtml(){
+  const notesSorted = freeNotes.slice().sort((a,b)=>b.ts-a.ts);
+  const notesHtml = notesSorted.length
+    ? `<div class="cloud">${notesSorted.map((n,i)=>{
+        const preview = n.text.length>28 ? n.text.slice(0,28)+'…' : n.text;
+        const dur=(4.5+(i%4)*0.6).toFixed(1), delay=((i%5)*0.4).toFixed(1);
+        return `<div class="bubble" style="animation-duration:${dur}s,.4s;animation-delay:${delay}s,0s" onclick="openModal('note','FREE','${n.id}')">${escapeHtml(preview)}</div>`;
+      }).join('')}</div>`
+    : `<div class="nolog">Заметок пока нет</div>`;
+  return `
+  <div class="card freecard ${freeNotesOpen?'open':''}" data-id="FREE">
+    <div class="card-head pressable" onclick="toggleFreeNotes()">
+      <div class="dot"></div>
+      <div class="card-title">
+        <div class="name">✏️ Свободные заметки</div>
+        <div class="meta"><span>личные, без привязки к блоку</span></div>
+      </div>
+      <div class="chev">›</div>
+    </div>
+    <div class="card-body">
+      <div class="card-body-inner">
+        ${notesHtml}
+        <button class="addnote-btn" onclick="openModal('note','FREE')">＋ Добавить заметку</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildCardHtml(b){
+  const st = STATUSES[b.status];
+  const isOpen = openIds.has(b.id);
+  const notesSorted = b.notes.slice().sort((x,y)=>y.ts-x.ts);
+  const notesHtml = notesSorted.length
+    ? `<div class="cloud">${notesSorted.map((n,i)=>{
+        const preview = n.text.length>28 ? n.text.slice(0,28)+'…' : n.text;
+        const dur=(4.5+(i%4)*0.6).toFixed(1), delay=((i%5)*0.4).toFixed(1);
+        return `<div class="bubble" style="animation-duration:${dur}s,.4s;animation-delay:${delay}s,0s" onclick="openModal('note','${b.id}','${n.id}')">${escapeHtml(preview)}</div>`;
+      }).join('')}</div>`
+    : `<div class="nolog">Заметок пока нет</div>`;
+  const statusBtns = Object.keys(STATUSES).map(key=>
+    `<button class="sbtn ${b.status===key?'sel-'+STATUSES[key].cls:''}" onclick="setStatus('${b.id}','${key}')">${STATUSES[key].label}</button>`
+  ).join('');
+  const catOptions = CATEGORIES.map(c=>`<option value="${c.key}" ${b.category===c.key?'selected':''}>${c.label}</option>`).join('');
+  const ccfg = COMPLEX_CONFIG[b.category];
+  const complexExtra = ccfg ? `
+    <input class="complex-input" list="complexSuggestions" value="${escapeHtml(b.complex)}" placeholder="${ccfg.placeholder}" onchange="setComplex('${b.id}', this.value)">
+    <div class="chiprow">${ccfg.roles.map(r=>`<button class="rchip ${b.role===r?'active':''}" onclick="setRole('${b.id}','${r}')">${r}</button>`).join('')}</div>
+  ` : '';
+  const displayName = (b.category ? CAT_MAP[b.category].label+' ' : '') + b.title;
+  const roleTag = b.role ? `<span class="rolebadge">${b.role}</span>` : '';
+  const markerChips = MARKERS.map(m=>
+    `<button class="rchip mchip ${(b.markers||[]).includes(m.key)?'active':''}" style="${(b.markers||[]).includes(m.key)?`background:${m.color};color:#fff;border-color:transparent;`:''}" onclick="toggleMarker('${b.id}','${m.key}')">${m.label}</button>`
+  ).join('');
+  const specialChip = b.category==='so96' ? `
+    <div class="fieldlabel" style="color:#ff0e0e;">Особый маркер</div>
+    <div class="chiprow">
+      <button class="rchip mchip-special ${(b.markers||[]).includes('prm_prd')?'active':''}" onclick="toggleMarker('${b.id}','prm_prd')">${SPECIAL_MARKER.label}</button>
+    </div>` : '';
+  return `
+    <div class="card ${isOpen?'open':''}" data-id="${b.id}">
+      <div class="card-head pressable" onclick="toggleCard('${b.id}')">
+        <div class="dot ${st.cls}"></div>
+        <div class="card-title">
+          <div class="name">${escapeHtml(displayName)}</div>
+          <div class="meta">${catBadge(b.category)}${roleTag}${warrBadge(b.warranty)}${markerBadges(b)}<span>обновлено ${fmtTime(b.updatedAt)}</span></div>
+        </div>
+        <div class="chev">›</div>
+      </div>
+      <div class="card-body">
+        <div class="card-body-inner">
+          <div class="fieldlabel">Категория</div>
+          <select onchange="setCategory('${b.id}', this.value)">${catOptions}</select>
+          ${complexExtra}
+          <div class="fieldlabel">Маркеры работ</div>
+          <div class="chiprow">${markerChips}</div>
+          ${specialChip}
+          <div class="fieldlabel">Гарантия</div>
+          <div class="chiprow">
+            <button class="rchip warr-yes ${b.warranty===true?'active':''}" onclick="setWarranty('${b.id}', true)">Гарантийное</button>
+            <button class="rchip warr-no ${b.warranty===false?'active':''}" onclick="setWarranty('${b.id}', false)">Не гарантийное</button>
+          </div>
+          <div class="statusrow">${statusBtns}</div>
+          ${notesHtml}
+          <button class="addnote-btn" onclick="openModal('note','${b.id}')">＋ Добавить заметку</button>
+          <div class="card-actions"><button class="del" onclick="deleteBlock('${b.id}')">Удалить блок</button></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderList(){
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  let list = blocks.filter(b=>{
+    if(statusFilter!=='all' && b.status!==statusFilter) return false;
+    if(categoryFilter!=='all' && b.category!==categoryFilter) return false;
+    if(q && !b.title.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  list.sort((a,b)=>b.updatedAt-a.updatedAt);
+
+  const main = document.getElementById('main');
+  const freeHtml = q ? '' : buildFreeNotesHtml();
+
+  if(list.length===0){
+    main.innerHTML = freeHtml + `<div class="empty"><b>Пока пусто</b>${blocks.length===0 ? 'Нажмите «+» в панели снизу, чтобы добавить первый блок.' : 'Ничего не найдено по текущему фильтру.'}</div>`;
+    return;
+  }
+
+  if(COMPLEX_CONFIG[categoryFilter]){
+    const groups = {};
+    list.forEach(b=>{
+      const key = b.complex || 'Без комплекса';
+      (groups[key] = groups[key]||[]).push(b);
+    });
+    const keys = Object.keys(groups).sort((a,b)=> a==='Без комплекса'?1 : b==='Без комплекса'?-1 : a.localeCompare(b,'ru'));
+    main.innerHTML = freeHtml + keys.map(key=>{
+      const items = groups[key];
+      const isOpen = openFolders.has(key) || keys.length===1;
+      if(isOpen) openFolders.add(key);
+      return `
+      <div class="folder ${isOpen?'open':''}" data-key="${escapeHtml(key)}">
+        <div class="folder-head pressable" onclick="toggleFolder('${key.replace(/'/g,"\\'")}')">
+          <span class="fname"><span class="fmark"></span>${escapeHtml(key)}</span>
+          <span class="fcount">${items.length}</span>
+          <span class="chev">›</span>
+        </div>
+        <div class="folder-items">${items.map(buildCardHtml).join('')}</div>
+      </div>`;
+    }).join('');
+  } else {
+    main.innerHTML = freeHtml + list.map(buildCardHtml).join('');
+  }
+}
+
+loadBlocks();
+</script>
+</body>
+</html>
