@@ -1,5 +1,42 @@
-(()=>{const KEY='blocks-reminders-v1';function load(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return[]}}function save(a){localStorage.setItem(KEY,JSON.stringify(a))}function parse(text,now=new Date()){text=(text||'').trim();let when=null,m;if(m=text.match(/(?:через\s+)?полтора\s+часа/i))when=new Date(now.getTime()+90*60000);else if(m=text.match(/(?:через\s+)?пол(?:\s*)часа|через\s+30\s*(?:мин|минут)/i))when=new Date(now.getTime()+30*60000);else if(m=text.match(/через\s+(\d+(?:[.,]\d+)?)\s*(?:час|часа|часов|ч)/i))when=new Date(now.getTime()+Math.round(parseFloat(m[1].replace(',','.'))*60)*60000);else if(m=text.match(/через\s+(\d+)\s*(?:мин|минут|минуты)/i))when=new Date(now.getTime()+(+m[1])*60000);else if(m=text.match(/завтра(?:\s+в)?\s+(\d{1,2})(?::(\d{2}))?/i)){when=new Date(now);when.setDate(when.getDate()+1);when.setHours(+m[1],+(m[2]||0),0,0)}else if(m=text.match(/(?:сегодня\s+)?(?:в\s*)?(?:к\s*)?(\d{1,2})[:.](\d{2})/i)){when=new Date(now);when.setHours(+m[1],+m[2],0,0);if(when<=now)when.setDate(when.getDate()+1)}if(!when)return null;let label=text.replace(/(?:через\s+)?полтора\s+часа|(?:через\s+)?пол(?:\s*)часа|через\s+30\s*(?:мин|минут)|через\s+\d+(?:[.,]\d+)?\s*(?:час|часа|часов|ч)|через\s+\d+\s*(?:мин|минут|минуты)|завтра(?:\s+в)?\s+\d{1,2}(?::\d{2})?|(?:сегодня\s+)?(?:в\s*)?(?:к\s*)?\d{1,2}[:.]\d{2}/ig,'').replace(/^[\s,.:;—-]+|[\s,.:;—-]+$/g,'').trim()||text;return{when:when.getTime(),label}}function findBlock(text){if(typeof blocks==='undefined')return null;const low=text.toLowerCase();return blocks.filter(b=>b.title&&low.includes(String(b.title).toLowerCase())).sort((a,b)=>String(b.title).length-String(a.title).length)[0]||null}function fmt(ts){const d=new Date(ts),n=new Date(),t=new Date();t.setDate(t.getDate()+1);const day=d.toDateString()===n.toDateString()?'Сегодня':d.toDateString()===t.toDateString()?'Завтра':d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'});return `${day}, ${d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}`}async function permission(){if('Notification'in window&&Notification.permission==='default')try{await Notification.requestPermission()}catch(e){}}
-function isFreeContext(){try{if(typeof noteCtx!=='undefined'&&noteCtx?.blockId==='FREE')return true;if(typeof noteCtx!=='undefined'&&noteCtx?.noteId&&typeof freeNotes!=='undefined'&&freeNotes.some(n=>n.id===noteCtx.noteId))return true;const title=document.getElementById('noteModalTitle')?.textContent||'';return /свободн/i.test(title)}catch(e){return false}}
-function createFromCurrent(){if(!isFreeContext())return;const ta=document.getElementById('noteText'),text=ta?.value?.trim()||'',p=parse(text);if(!p)return;const block=findBlock(text),arr=load(),noteId=(typeof noteCtx!=='undefined'&&noteCtx?.noteId)||null;let r=noteId?arr.find(x=>!x.done&&x.freeNote&&x.noteId===noteId):null;if(!r){const recent=arr.find(x=>!x.done&&x.freeNote&&x.source===text&&Date.now()-(x.createdAt||0)<5000);if(recent)return;r={id:'r'+Date.now()+Math.random().toString(36).slice(2,6),noteId,done:false,fired:false,createdAt:Date.now(),freeNote:true};arr.push(r)}Object.assign(r,{blockId:block?.id||'FREE',blockTitle:block?.title||'',text:p.label,source:text,when:p.when,fired:false,updatedAt:Date.now()});save(arr);permission();setTimeout(()=>{if(typeof showToast==='function')showToast(`🔔 Напоминание создано: ${fmt(p.when)}${block?' · блок '+block.title:''}`);if(typeof renderAll==='function')renderAll()},80)}
-document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.closest('#modalBgNote')&&/сохранить/i.test(b.textContent||''))createFromCurrent()},true);
-function ensureTopPanels(){setTimeout(()=>{try{if(typeof attentionDashboard==='function')attentionDashboard();if(typeof complexCards==='function')complexCards()}catch(e){}},0)}const rl=window.renderList;if(typeof rl==='function')window.renderList=function(){const out=rl.apply(this,arguments);ensureTopPanels();return out};const rs=window.setStatusFilter;if(typeof rs==='function')window.setStatusFilter=function(){const out=rs.apply(this,arguments);ensureTopPanels();return out};const rc=window.setCategoryFilter;if(typeof rc==='function')window.setCategoryFilter=function(){const out=rc.apply(this,arguments);ensureTopPanels();return out};ensureTopPanels();})();
+(()=>{
+const KEY='blocks-reminders-v1';
+const load=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return[]}};
+const save=a=>localStorage.setItem(KEY,JSON.stringify(a));
+function parse(text,now=new Date()){
+ text=(text||'').trim();let when=null,m,matched='';
+ const tests=[
+  [/(?:через\s+)?полтора\s+часа/i,()=>90],
+  [/(?:через\s+)?пол(?:\s*)часа|через\s+30\s*(?:мин|минут)/i,()=>30],
+  [/через\s+(\d+(?:[.,]\d+)?)\s*(?:час|часа|часов|ч)/i,x=>Math.round(parseFloat(x[1].replace(',','.'))*60)],
+  [/через\s+(\d+)\s*(?:мин|минут|минуты)/i,x=>parseInt(x[1],10)]
+ ];
+ for(const [re,mins] of tests){m=text.match(re);if(m){matched=m[0];when=new Date(now.getTime()+mins(m)*60000);break}}
+ if(!when&&(m=text.match(/завтра(?:\s+в)?\s+(\d{1,2})(?::(\d{2}))?/i))){matched=m[0];when=new Date(now);when.setDate(when.getDate()+1);when.setHours(+m[1],+(m[2]||0),0,0)}
+ if(!when&&(m=text.match(/(?:сегодня\s+)?(?:в\s*)?(?:к\s*)?(\d{1,2})[:.](\d{2})/i))){matched=m[0];when=new Date(now);when.setHours(+m[1],+m[2],0,0);if(when<=now)when.setDate(when.getDate()+1)}
+ if(!when)return null;
+ const label=text.replace(matched,'').replace(/^[\s,.:;—-]+|[\s,.:;—-]+$/g,'').trim()||text;
+ return{when:when.getTime(),label};
+}
+function fmt(ts){const d=new Date(ts),n=new Date(),t=new Date();t.setDate(t.getDate()+1);const day=d.toDateString()===n.toDateString()?'Сегодня':d.toDateString()===t.toDateString()?'Завтра':d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'});return `${day}, ${d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}`}
+function allFree(){try{return typeof freeNotes!=='undefined'&&Array.isArray(freeNotes)?freeNotes:[]}catch(e){return[]}}
+function allBlocks(){try{return typeof blocks!=='undefined'&&Array.isArray(blocks)?blocks:[]}catch(e){return[]}}
+function findBlock(text){const low=(text||'').toLowerCase();return allBlocks().filter(b=>b.title&&low.includes(String(b.title).toLowerCase())).sort((a,b)=>String(b.title).length-String(a.title).length)[0]||null}
+function syncFreeNotes(showMessage=false){
+ const notes=allFree(),arr=load();let changed=false,created=null;
+ notes.forEach(n=>{const p=parse(n.text);let r=arr.find(x=>x.freeNote&&x.noteId===n.id&&!x.done);if(!p)return;if(r&&r.source===n.text)return;const b=findBlock(n.text);if(!r){r={id:'r'+Date.now()+Math.random().toString(36).slice(2,6),noteId:n.id,freeNote:true,done:false,fired:false,createdAt:Date.now()};arr.push(r)}Object.assign(r,{blockId:b?.id||'FREE',blockTitle:b?.title||'',text:p.label,source:n.text,when:p.when,fired:false,updatedAt:Date.now()});changed=true;created=r});
+ if(changed){save(arr);if(showMessage&&created&&typeof showToast==='function')showToast(`🔔 Напоминание создано: ${fmt(created.when)}`)}
+ return changed;
+}
+function counts(){const arr=load(),now=Date.now(),active=arr.filter(r=>!r.done),due=active.filter(r=>r.when<=now);const bs=allBlocks(),attention=bs.filter(b=>b.status!=='done'&&(b.nextAction||b.waitingFor||b.currentState)).length,waiting=bs.filter(b=>b.status!=='done'&&b.waitingFor).length;return{active:active.length,due:due.length,attention,waiting}}
+function ensureDashboard(){
+ const main=document.getElementById('main');if(!main)return;let dash=document.getElementById('persistentTodayDash');
+ if(!dash){dash=document.createElement('section');dash.id='persistentTodayDash';dash.className='ops-dash';main.prepend(dash)}
+ const c=counts();dash.innerHTML=`<div class="ops-dash-title">Сегодня</div><div class="ops-dash-cards"><button type="button"><b>${c.attention}</b><span>требуют внимания</span></button><button type="button"><b>${c.waiting}</b><span>ожидают</span></button><button type="button"><b>${c.active}</b><span>напоминаний</span></button><button type="button"><b>${c.due}</b><span>просрочено</span></button></div>`;
+ const old=[...main.querySelectorAll('.ops-dash')].filter(x=>x.id!=='persistentTodayDash');old.forEach(x=>x.remove());
+}
+function tick(show=false){const changed=syncFreeNotes(show);ensureDashboard();if(changed&&'Notification'in window&&Notification.permission==='default')try{Notification.requestPermission()}catch(e){}}
+// Не зависим от submitNote: после сохранения сканируем сами данные свободных заметок.
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button');if(b&&b.closest('#modalBgNote')&&/сохранить/i.test(b.textContent||''))setTimeout(()=>tick(true),120)},true);
+const main=document.getElementById('main');if(main)new MutationObserver(()=>{clearTimeout(window.__freeReminderDashTimer);window.__freeReminderDashTimer=setTimeout(()=>{syncFreeNotes(false);ensureDashboard()},30)}).observe(main,{childList:true});
+setInterval(()=>tick(false),1000);tick(false);
+})();
