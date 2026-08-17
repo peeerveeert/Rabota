@@ -23,7 +23,14 @@ function allBlocks(){try{return typeof blocks!=='undefined'&&Array.isArray(block
 function findBlock(text){const low=(text||'').toLowerCase();return allBlocks().filter(b=>b.title&&low.includes(String(b.title).toLowerCase())).sort((a,b)=>String(b.title).length-String(a.title).length)[0]||null}
 function syncFreeNotes(showMessage=false){
  const notes=allFree(),arr=load();let changed=false,created=null;
- notes.forEach(n=>{const p=parse(n.text);let r=arr.find(x=>x.freeNote&&x.noteId===n.id&&!x.done);if(!p)return;if(r&&r.source===n.text)return;const b=findBlock(n.text);if(!r){r={id:'r'+Date.now()+Math.random().toString(36).slice(2,6),noteId:n.id,freeNote:true,done:false,fired:false,createdAt:Date.now()};arr.push(r)}Object.assign(r,{blockId:b?.id||'FREE',blockTitle:b?.title||'',text:p.label,source:n.text,when:p.when,fired:false,updatedAt:Date.now()});changed=true;created=r});
+ notes.forEach(n=>{
+  const p=parse(n.text),any=arr.find(x=>x.freeNote&&x.noteId===n.id&&!x.done);
+  if(!p)return;
+  // Одна свободная заметка = одно активное напоминание. Простое повторное сохранение время не двигает.
+  if(any)return;
+  const b=findBlock(n.text),r={id:'r'+Date.now()+Math.random().toString(36).slice(2,6),noteId:n.id,freeNote:true,done:false,fired:false,createdAt:Date.now(),blockId:b?.id||'FREE',blockTitle:b?.title||'',text:p.label,source:n.text,when:p.when,updatedAt:Date.now()};
+  arr.push(r);changed=true;created=r;
+ });
  if(changed){save(arr);if(showMessage&&created&&typeof showToast==='function')showToast(`🔔 Напоминание создано: ${fmt(created.when)}`)}
  return changed;
 }
@@ -32,11 +39,12 @@ function ensureDashboard(){
  const main=document.getElementById('main');if(!main)return;let dash=document.getElementById('persistentTodayDash');
  if(!dash){dash=document.createElement('section');dash.id='persistentTodayDash';dash.className='ops-dash';main.prepend(dash)}
  const c=counts();dash.innerHTML=`<div class="ops-dash-title">Сегодня</div><div class="ops-dash-cards"><button type="button"><b>${c.attention}</b><span>требуют внимания</span></button><button type="button"><b>${c.waiting}</b><span>ожидают</span></button><button type="button"><b>${c.active}</b><span>напоминаний</span></button><button type="button"><b>${c.due}</b><span>просрочено</span></button></div>`;
- const old=[...main.querySelectorAll('.ops-dash')].filter(x=>x.id!=='persistentTodayDash');old.forEach(x=>x.remove());
+ [...main.querySelectorAll('.ops-dash')].filter(x=>x.id!=='persistentTodayDash').forEach(x=>x.remove());
 }
-function tick(show=false){const changed=syncFreeNotes(show);ensureDashboard();if(changed&&'Notification'in window&&Notification.permission==='default')try{Notification.requestPermission()}catch(e){}}
-// Не зависим от submitNote: после сохранения сканируем сами данные свободных заметок.
-document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button');if(b&&b.closest('#modalBgNote')&&/сохранить/i.test(b.textContent||''))setTimeout(()=>tick(true),120)},true);
-const main=document.getElementById('main');if(main)new MutationObserver(()=>{clearTimeout(window.__freeReminderDashTimer);window.__freeReminderDashTimer=setTimeout(()=>{syncFreeNotes(false);ensureDashboard()},30)}).observe(main,{childList:true});
-setInterval(()=>tick(false),1000);tick(false);
+function tick(show=false){const changed=syncFreeNotes(show);ensureDashboard();if(changed&&'Notification'in window&&Notification.permission==='default')try{Notification.requestPermission()}catch(e){}return changed}
+function afterSave(){let tries=0;const refresh=()=>{tries++;const changed=tick(tries===1);if(changed||tries>=8)return;setTimeout(refresh,100)};setTimeout(refresh,0)}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button');if(b&&b.closest('#modalBgNote')&&/сохранить/i.test(b.textContent||''))afterSave()},true);
+const main=document.getElementById('main');if(main)new MutationObserver(()=>{clearTimeout(window.__freeReminderDashTimer);window.__freeReminderDashTimer=setTimeout(()=>{syncFreeNotes(false);ensureDashboard()},20)}).observe(main,{childList:true,subtree:false});
+window.addEventListener('storage',e=>{if(e.key===KEY)ensureDashboard()});
+setInterval(()=>tick(false),500);tick(false);
 })();
